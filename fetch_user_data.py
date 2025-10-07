@@ -1,6 +1,8 @@
 import requests
 import time
 import json
+import pandas as pd
+import numpy as np
 
 def get_rated_user_handles(max_users=10000):
     """
@@ -65,16 +67,39 @@ def get_user_info_in_batches(handles, batch_size=100):
 # --- Main script ---
 if __name__ == "__main__":
     # 1. Get the list of user handles
-    user_handles = get_rated_user_handles(max_users=10000)
+    # user_handles = get_rated_user_handles(max_users=10000)
     
-    if user_handles:
-        # 2. Fetch the detailed info for those handles in batches
-        all_users = get_user_info_in_batches(user_handles)
+    # if user_handles:
+    #     # 2. Fetch the detailed info for those handles in batches
+    #     all_users = get_user_info_in_batches(user_handles)
         
-        print(f"\nSuccessfully fetched data for {len(all_users)} users.")
+    #     print(f"\nSuccessfully fetched data for {len(all_users)} users.")
         
-        # 3. Save the results to a JSON file
-        with open("codeforces_user_data.json", "w") as f:
-            json.dump(all_users, f, indent=4)
+    #     # 3. Save the results to a JSON file
+    #     with open("codeforces_user_data.json", "w") as f:
+    #         json.dump(all_users, f, indent=4)
         
-        print("Data saved to codeforces_user_data.json")
+    #     print("Data saved to codeforces_user_data.json")
+
+    name, country, rank, handle = [], [], [], []
+
+    with open("codeforces_user_data.json", "r") as file:
+        data = json.load(file)
+
+        print("Making the dataframe...")
+        for user in data:
+            name.append(f"{user.get('firstName', None)} {user.get('lastName', None)}")
+            country.append(user.get('country', None))
+            rank.append(user.get('rank', None))
+            handle.append(user.get('handle', None))
+        
+        users = pd.DataFrame({
+            "Name": np.array(name),
+            "Country": np.array(country),
+            "Rank": np.array(rank),
+            "Handle": np.array(handle)
+        })
+
+        users.to_csv("codeforces_user_data.csv", index=False)
+        print("Data saved to codeforces_user_data.csv")
+        
