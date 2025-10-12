@@ -1,111 +1,102 @@
 import requests
 import time
-import json
-import pandas as pd
-import numpy as np
+import csv
+import os
 
-def get_rated_user_handles(max_users=10000):
+# --- Configuration ---
+TOTAL_HANDLES_TO_PROCESS = 30000
+OUTPUT_CSV_FILE = 'codeforces_filtered_users.csv'
+BATCH_SIZE = 500 # Number of users to fetch in a single API call
+
+def get_all_rated_handles(max_handles):
     """
-    Fetches a list of active, rated user handles from Codeforces.
+    Fetches a list of all active, rated user handles from the Codeforces API.
+    This provides the pool of users we will get details for.
     """
+    print(f"Fetching up to {max_handles} rated user handles from Codeforces...")
     try:
-        print("Fetching a list of rated users...")
-        # The user.ratedList endpoint gives us a list of active users.
         url = "https://codeforces.com/api/user.ratedList?activeOnly=true"
         response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()  # Raise an exception for bad status codes
         
         data = response.json()
         if data['status'] == 'OK':
-            # Extract just the 'handle' from each user object
             handles = [user['handle'] for user in data['result']]
-            print(f"Successfully fetched {len(handles)} user handles.")
-            return handles[:max_users] # Return the number of users we want
+            print(f"Successfully fetched {len(handles)} total rated handles.")
+            return handles[:max_handles]
         else:
             print(f"Codeforces API Error: {data.get('comment')}")
             return []
-            
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
+        print(f"A network error occurred while fetching user list: {e}")
         return []
 
-def get_user_info_in_batches(handles, batch_size=100):
+def fetch_and_save_users_to_csv(handles):
     """
-    Fetches user info for a list of handles in batches to respect API limits.
+    Fetches user info in batches and saves valid users directly to a CSV file.
+    A user is valid if they have both a 'rank' and a 'country'.
     """
-    all_user_data = []
-    # Loop through the handles list in chunks of 'batch_size'
-    for i in range(0, len(handles), batch_size):
-        # Create a batch of handles
-        batch = handles[i:i + batch_size]
-        
-        # Join handles with a semicolon for the API request
-        handles_str = ";".join(batch)
-        url = f"https://codeforces.com/api/user.info?handles={handles_str}"
-        
-        print(f"Fetching batch {i // batch_size + 1}/{(len(handles) + batch_size - 1) // batch_size}...")
-        
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            
-            data = response.json()
-            if data['status'] == 'OK':
-                all_user_data.extend(data['result'])
-            else:
-                print(f"API Error on batch {i}: {data.get('comment')}")
-
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred on batch {i}: {e}")
-        
-        # IMPORTANT: Wait for 2.5 seconds to respect the rate limit
-        time.sleep(2.5)
-        
-    return all_user_data
-
-
-# --- Main script ---
-if __name__ == "__main__":
-    user_handles = get_rated_user_handles(max_users=10000)
+    # Define the columns for the CSV file
+    csv_columns = ['Handle', 'Rank', 'Country']
     
-    if user_handles:
-        # 2. Fetch the detailed info for those handles in batches
-        all_users = get_user_info_in_batches(user_handles)
-        
-        print(f"\nSuccessfully fetched data for {len(all_users)} users.")
-        
-        # 3. Save the results to a JSON file
-        with open("codeforces_user_data.json", "w") as f:
-            json.dump(all_users, f, indent=4)
-        
-        print("Data saved to codeforces_user_data.json")
+    # Counter for valid users found
+    valid_users_count = 0
+    
+    print(f"\nProcessing {len(handles)} handles. This will take approximately {((len(handles)/BATCH_SIZE)*2)/60:.1f} minutes.")
 
-    name, country, rank, handle = [], [], [], []
-
-    with open("codeforces_user_data.json", "r") as file:
-        data = json.load(file)
-
-        print("Making the dataframe...")
-        for user in data:
-            if user.get('firstName', None) and user.get('lastName', None):
-                name.append(f"{user.get('firstName')} {user.get('lastName')}")
-            elif user.get('firstName', None):
-                name.append(user.get('firstName'))
-            elif user.get('lastName', None):
-                name.append(user.get('lastName'))
-            else:
-                name.append(None)
-            country.append(user.get('country', None))
-            rank.append(user.get('rank', None))
-            handle.append(user.get('handle', None))
+    # Open the CSV file in write mode to add the header
+    # 'newline=""' is important to prevent extra blank rows in the CSV
+    with open(OUTPUT_CSV_FILE, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
+        writer.writeheader()
         
-        users = pd.DataFrame({
-            "Name": np.array(name),
-            "Country": np.array(country),
-            "Rank": np.array(rank),
-            "Handle": np.array(handle)
-        })
+        # Loop through all handles in batches
+        num_batches = (len(handles) + BATCH_SIZE - 1) // BATCH_SIZE
+        for i in range(0, len(handles), BATCH_SIZE):
+            batch_handles = handles[i:i + BATCH_SIZE]
+            handles_str = ";".join(batch_handles)
+            url = f"https://codeforces.com/api/user.info?handles={handles_str}"
+            
+            print(f"Processing Batch {i // BATCH_SIZE + 1}/{num_batches}...")
+            
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                data = response.json()
+                
+                if data['status'] == 'OK':
+                    # Process each user in the returned batch
+                    for user in data['result']:
+                        # THE CORE LOGIC: Check if both rank and country exist
+                        if 'rank' in user and 'country' in user:
+                            writer.writerow({
+                                'Handle': user['handle'],
+                                'Rank': user['rank'],
+                                'Country': user['country']
+                            })
+                            valid_users_count += 1
+                else:
+                    print(f"  -> API Error on batch: {data.get('comment')}")
 
-        users.to_csv("codeforces_user_data.csv", index=False)
-        print("Data saved to codeforces_user_data.csv")
-        
+            except requests.exceptions.RequestException as e:
+                print(f"  -> Network error on batch: {e}")
+
+            # IMPORTANT: Wait 2 seconds due to the API rate limit
+            time.sleep(2)
+            
+    print("\n--- Process Complete ---")
+    print(f"Finished processing all batches.")
+    print(f"Found and saved {valid_users_count} users with both rank and country.")
+    print(f"Data is saved in '{OUTPUT_CSV_FILE}'")
+
+
+# --- Main script execution ---
+if __name__ == "__main__":
+    # 1. Get the pool of user handles to process
+    handles_to_process = get_all_rated_handles(max_handles=TOTAL_HANDLES_TO_PROCESS)
+    
+    if handles_to_process:
+        # 2. Fetch data in batches and save valid users directly to CSV
+        fetch_and_save_users_to_csv(handles_to_process)
+    else:
+        print("Could not fetch user handles. Halting execution.")
