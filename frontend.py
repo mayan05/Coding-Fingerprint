@@ -32,8 +32,13 @@ st.markdown(
     .stTextArea textarea {
         font-family: 'Consolas', 'Courier New', monospace;
         font-size: 15px;
-        background-color: #f8f9fa;
+        background-color: #000000; /* black background */
+        color: #eeeeee; /* light text for readability */
+        border: 1px solid #333333;
         border-radius: 10px;
+    }
+    .stTextArea textarea::placeholder {
+        color: #9aa0a6; /* softer placeholder on dark */
     }
     </style>
     """,
@@ -82,8 +87,7 @@ with col2:
     st.info(
         """
         ### 💡 Tips
-        - Supports `.cpp`, `.py`, `.java`, and `.txt` files  
-        - Make sure your backend (Flask) is running  
+        - Supports `.cpp`, `.py`, `.java`, and `.txt` files   
         - Click **Predict** to see model output  
         """
     )
@@ -127,7 +131,7 @@ st.markdown(
     """
     <hr>
     <p style='text-align:center;color:gray;'>
-    Made with ❤️ by <b>Mohammed Bilal</b> | Powered by Streamlit & Flask
+    Made with ❤️ by <b>Mohammed Bilal and Mayan Sequeira</b> | Powered by Streamlit & Flask
     </p>
     """,
     unsafe_allow_html=True
