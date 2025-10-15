@@ -53,23 +53,36 @@ backend_url = "http://127.0.0.1:5000/predict"  # Flask backend URL
 # =========================
 col1, col2 = st.columns([2, 1])
 
+# Track preferred language for code highlighting in previews
+preview_language = "cpp"
+
 with col1:
     upload_option = st.radio("Choose Input Method:", ["🧾 Paste Code", "📂 Upload File"], horizontal=True)
 
     code_input = ""
     if upload_option == "🧾 Paste Code":
-        code_input = st.text_area("💻 Paste your C++ or Python code below:", height=320)
+        code_input = st.text_area("💻 Paste your C++, Python, or Java code below:", height=320)
     else:
-        uploaded_file = st.file_uploader("📁 Upload a source code file (.cpp, .py, .txt)", type=["cpp", "py", "txt"])
+        uploaded_file = st.file_uploader("📁 Upload a source code file (.cpp, .py, .java, .txt)", type=["cpp", "py", "java", "txt"])
         if uploaded_file is not None:
             code_input = uploaded_file.read().decode("utf-8")
-            st.code(code_input, language="cpp")
+            # Infer preview language from file extension
+            filename = uploaded_file.name.lower()
+            if filename.endswith(".py"):
+                preview_language = "python"
+            elif filename.endswith(".java"):
+                preview_language = "java"
+            elif filename.endswith(".cpp"):
+                preview_language = "cpp"
+            else:
+                preview_language = "text"
+            st.code(code_input, language=preview_language)
 
 with col2:
     st.info(
         """
         ### 💡 Tips
-        - Supports `.cpp`, `.py`, and `.txt` files  
+        - Supports `.cpp`, `.py`, `.java`, and `.txt` files  
         - Make sure your backend (Flask) is running  
         - Click **Predict** to see model output  
         """
@@ -102,7 +115,7 @@ if predict_button:
 
                     # Optional: show highlighted source code
                     st.markdown("### 🧩 Source Code Preview")
-                    st.code(code_input, language="cpp")
+                    st.code(code_input, language=preview_language)
 
             except Exception as e:
                 st.error(f"🚫 Failed to connect to backend: {e}")
